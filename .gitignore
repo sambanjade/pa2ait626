@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+.env
+.env.*
+!.env.example
+*.pdf
+*.zip
+data/
+tweet/
+outputs/
+!outputs/.gitkeep
+.DS_Store
