@@ -1,6 +1,6 @@
 # PA2 requirements and implementation choices
 
-The supplied local files are `Programming assignment NB_Tips.pdf`, the generic `Programming Assignment Rubric.pdf`, and `tweet.zip`. A second workspace search on October 22 did not locate the main sentiment-assignment description. The tips explicitly defer preprocessing requirements to it. This implementation is complete against the choices below; submission compliance remains conditional on checking the full prompt.
+The supplied local files are `Programming assignment NB_Tips.pdf`, the generic `Programming Assignment Rubric.pdf`, and `tweet.zip`. A fresh search of `ait626/PAs` on October 24 did not locate the main sentiment-assignment description. The tips explicitly defer preprocessing requirements to it. This implementation follows the choices below; submission compliance remains conditional on checking the full prompt.
 
 | Item | Implemented choice | Evidence or confirmation needed |
 |---|---|---|
@@ -15,9 +15,10 @@ The supplied local files are `Programming assignment NB_Tips.pdf`, the generic `
 | Binary interpretation | Count each word at most once per document at fit and inference | Tips describe occurrence counts; not full Bernoulli NB |
 | Metrics | Labeled confusion matrix, per-class precision/recall/F1, accuracy and macro-F1 | Tips specify first five; macro-F1 supports imbalanced data |
 | Selection | Training-only stratified exact-text group holdout, seed 626 | Added reproducible evaluation choice |
+| Conflicting labels | Keep both supplied labels; keep the entire conflicting text group in fitting | Two groups/four training documents in supplied data |
 | Output | Console summary, JSON metrics/model, prediction CSVs, report | Required filenames/CLI/output format not known |
 | Identity | Sankalpa Banjade; other team identities not assumed | Confirm PA2 team separately from project team |
 
 The generic rubric includes an exclusive-team-contribution condition, whereas the saved course outline describes AI assistance with disclosure. This work explicitly discloses substantial Codex assistance; confirm the applicable current assignment instructions before treating it as an eligible final submission. No compliance claim is made on the team's behalf.
 
-No claims are made about Canvas submission, deadline, GitHub publication or work completed by teammates.
+The existing local repository has origin `https://github.com/sambanjade/pa2ait626.git`. This review does not claim that the current changes are published, submitted on Canvas, on time, or reviewed by teammates.

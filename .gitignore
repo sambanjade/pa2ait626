@@ -12,3 +12,6 @@ tweet/
 outputs/
 !outputs/.gitkeep
 .DS_Store
+results/model.json
+results/errors.json
+results/predictions_*.csv

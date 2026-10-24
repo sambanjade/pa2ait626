@@ -233,5 +233,15 @@
       "tweet/train/negative/378.txt"
     ]
   ],
+  "conflicting_training_label_groups": [
+    [
+      "tweet/train/positive/426.txt",
+      "tweet/train/negative/47.txt"
+    ],
+    [
+      "tweet/train/positive/635.txt",
+      "tweet/train/negative/1254.txt"
+    ]
+  ],
   "note": "Exact byte matches only; no normalization or split changes applied."
 }

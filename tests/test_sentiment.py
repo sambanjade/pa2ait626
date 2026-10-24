@@ -3,10 +3,13 @@ import math
 import sys
 import tempfile
 import unittest
+import zipfile
+import contextlib
+import io
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sentiment_nb import Config, Document, NaiveBayes, evaluate, tokenize, validation_split
+from sentiment_nb import Config, Document, NaiveBayes, evaluate, tokenize, validation_split, experiment, load_documents
 
 
 class BayesTests(unittest.TestCase):
@@ -59,6 +62,41 @@ class BayesTests(unittest.TestCase):
         for alpha in (0, -1, float('nan'), float('inf')):
             with self.assertRaises(ValueError):
                 NaiveBayes(Config(alpha=alpha))
+
+    def test_conflicting_label_groups_stay_in_fitting(self):
+        rows = [Document(f'{label}{i}', label, f'{label} {i}')
+                for label in ('negative', 'positive') for i in range(5)]
+        conflicts = [Document('conflict-neg', 'negative', 'same tweet'),
+                     Document('conflict-pos', 'positive', 'same tweet')]
+        fit, dev = validation_split(rows + conflicts)
+        self.assertTrue(all(row in fit for row in conflicts))
+        self.assertFalse({r.text for r in fit} & {r.text for r in dev})
+        self.assertEqual(sorted(r.identifier for r in fit + dev),
+                         sorted(r.identifier for r in rows + conflicts))
+        self.assertEqual((fit, dev), validation_split(rows + conflicts))
+
+    def test_experiment_zip_and_folder_with_all_test_texts_overlapping(self):
+        # Exercise the real CLI pipeline's data/model/report paths on a tiny
+        # archive, including the legitimate empty sensitivity-analysis subset.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / 'tweets.zip'
+            with zipfile.ZipFile(archive, 'w') as bundle:
+                for label, word in [('negative', 'bad'), ('positive', 'great')]:
+                    for i in range(5):
+                        bundle.writestr(f'tweet/train/{label}/{i}.txt', f'{word} service {i}')
+                    bundle.writestr(f'tweet/test/{label}/0.txt', f'{word} service 0')
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = experiment(archive, root / 'results')
+            self.assertEqual(len(result['trials']), 4)
+            self.assertEqual(result['overlap_test_documents'], 2)
+            self.assertTrue(all(t['nonoverlap_test'] is None for t in result['trials']))
+            self.assertTrue((root / 'results/REPORT.md').is_file())
+            self.assertEqual(NaiveBayes.load(root / 'results/model.json').predict('great'), 'positive')
+            # Extract only these generated, controlled member paths for loader parity.
+            with zipfile.ZipFile(archive) as bundle:
+                bundle.extractall(root / 'extracted')
+            self.assertEqual(load_documents(archive), load_documents(root / 'extracted'))
 
 
 if __name__ == '__main__':

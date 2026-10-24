@@ -40,6 +40,9 @@ def audit(archive):
         if any(name.startswith("tweet/train/") for name in names)
         and any(name.startswith("tweet/test/") for name in names)
     ]
+    conflicts = [names for names in hashes.values()
+                 if len({PurePosixPath(name).parts[2] for name in names
+                         if name.startswith("tweet/train/")}) > 1]
     return {
         "archive": Path(archive).name,
         "archive_sha256": hashlib.sha256(Path(archive).read_bytes()).hexdigest(),
@@ -48,6 +51,7 @@ def audit(archive):
         "empty_files": empty_files,
         "non_utf8_files": decode_errors,
         "exact_train_test_overlap_groups": overlaps,
+        "conflicting_training_label_groups": conflicts,
         "note": "Exact byte matches only; no normalization or split changes applied.",
     }
 

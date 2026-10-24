@@ -1,12 +1,14 @@
 """AIT 626 PA2: tweet sentiment classification with manually implemented Naive Bayes.
 
-Prepared for Sankalpa Banjade, October 22, 2026, with disclosed Codex assistance.
+Prepared for Sankalpa Banjade, October 24, 2026, with disclosed Codex assistance.
 Input: the provided tweet.zip archive, or an extracted tweet directory containing
 train/{negative,positive} and test/{negative,positive} text files.
 Output: labeled metrics, per-document predictions, a saved model and an experiment
 report. Example: `python sentiment_nb.py experiment --data tweet.zip`.
 Prediction: `python sentiment_nb.py predict --model results/model.json --text "Great!"`.
-The returned label is `negative` or `positive`; exact sample outputs are in README.
+Actual toy example: fitting negative="bad bad", positive="good" with alpha=1
+gives P(bad|negative)=3/4, P(good|positive)=2/3; predicting "good" returns
+`positive`. The CLI prints JSON containing text, label and both log scores.
 
 Algorithm:
 1. Read the instructor's supplied train/test partitions without changing them.
@@ -131,7 +133,9 @@ class NaiveBayes:
 
     def features(self, text: str) -> Counter:
         tokens = tokenize(text, self.config.stem)
-        return Counter(set(tokens) if self.config.representation == "binary" else tokens)
+        # Sorted binary features keep floating-point summation reproducible
+        # across processes with different Python hash seeds.
+        return Counter(sorted(set(tokens)) if self.config.representation == "binary" else tokens)
 
     def fit(self, rows: list[Document]) -> NaiveBayes:
         counts = {label: Counter() for label in LABELS}
@@ -209,20 +213,25 @@ def validation_split(rows: list[Document], seed: int = 626) -> tuple[list[Docume
     """Hold out ~20% of exact-text groups within each class, using train only.
 
     A duplicate text must not occur on both sides of this internal split. If
-    identical text has conflicting labels, reject it rather than leak labels.
+    identical text has conflicting labels, keep the whole group in fitting.
+    This retains all supplied labels without leaking that text into validation.
     The instructor's original train/test split remains untouched.
     """
     groups = {}
     for row in rows:
         digest = hashlib.sha256(row.text.encode("utf-8")).hexdigest()
         groups.setdefault(digest, []).append(row)
-    if any(len({r.label for r in group}) != 1 for group in groups.values()):
-        raise ValueError("Conflicting labels on identical training text")
     rng, fit, validation = random.Random(seed), [], []
+    pure_groups = {}
+    for key, group in groups.items():
+        if len({r.label for r in group}) > 1:
+            fit.extend(group)
+        else:
+            pure_groups[key] = group
     for label in LABELS:
-        keys = sorted(k for k, group in groups.items() if group[0].label == label)
+        keys = sorted(k for k, group in pure_groups.items() if group[0].label == label)
         if len(keys) < 2:
-            raise ValueError("Need at least two distinct training texts per class")
+            raise ValueError("Need at least two unambiguous distinct training texts per class")
         rng.shuffle(keys)
         cutoff = max(1, min(len(keys)-1, round(0.2 * len(keys))))
         for i, key in enumerate(keys):
@@ -261,13 +270,19 @@ def experiment(data: Path, output: Path) -> dict:
         "selected_index": selected, "trials": trials}, indent=2), encoding="utf-8")
     train_hashes = {hashlib.sha256(r.text.encode("utf-8")).hexdigest() for r in rows["train"]}
     overlap = [hashlib.sha256(r.text.encode("utf-8")).hexdigest() in train_hashes for r in rows["test"]]
+    training_groups = {}
+    for row in rows["train"]:
+        training_groups.setdefault(row.text, []).append(row)
+    conflicting_groups = [group for group in training_groups.values()
+                          if len({r.label for r in group}) > 1]
     for i, (config, trial) in enumerate(zip(configurations, trials)):
         start = time.perf_counter()
         model = NaiveBayes(config).fit(rows["train"])
         predicted = write_predictions(output / f"predictions_{i}.csv", rows["test"], model)
         trial["test"] = evaluate([r.label for r in rows["test"]], predicted)
         unique_rows = [(r, p) for r, p, duplicate in zip(rows["test"], predicted, overlap) if not duplicate]
-        trial["nonoverlap_test"] = evaluate([r.label for r, p in unique_rows], [p for r, p in unique_rows])
+        trial["nonoverlap_test"] = (evaluate([r.label for r, p in unique_rows], [p for r, p in unique_rows])
+                                    if unique_rows else None)
         trial["full_train_test_seconds"] = time.perf_counter()-start
         trial["vocabulary_size"] = len(model.vocabulary)
         if i == selected:
@@ -280,6 +295,8 @@ def experiment(data: Path, output: Path) -> dict:
     majority = max(LABELS, key=lambda label: counts["train"][label])
     result = dict(seed=626, data=str(data), counts=counts, fit_documents=len(fit),
                   validation_documents=len(dev), overlap_test_documents=sum(overlap),
+                  conflicting_training_groups=len(conflicting_groups),
+                  conflicting_training_documents=sum(map(len, conflicting_groups)),
                   selected_index=selected, trials=trials,
                   majority_baseline=evaluate([r.label for r in rows["test"]], [majority]*len(rows["test"])))
     (output / "metrics.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -292,7 +309,7 @@ def experiment(data: Path, output: Path) -> dict:
 def write_report(result: dict, output: Path) -> None:
     selected = result["trials"][result["selected_index"]]
     lines = ["# AIT 626 PA2 Naive Bayes experiment report", "",
-        "Sankalpa Banjade | October 22, 2026", "",
+        "Sankalpa Banjade | October 24, 2026", "",
         "This experiment implements tweet sentiment classification using count and binary-occurrence "
         "Naive Bayes, with and without Porter stemming. All Bayes probabilities and log scores are computed "
         "by the submitted code. This report records actual runs on the supplied archive.", "",
@@ -302,6 +319,9 @@ def write_report(result: dict, output: Path) -> None:
         f"{result['fit_documents']} fitting documents and {result['validation_documents']} validation documents. "
         "The four configurations use add-one smoothing. Validation macro-F1 selects the configuration; "
         "selection.json is saved before any test evaluation. Each configuration is refit on all training documents.", "",
+        f"The training data contains {result['conflicting_training_groups']} identical-text groups "
+        f"({result['conflicting_training_documents']} documents) with conflicting labels. These groups "
+        "stay entirely in the fitting partition. No labels or supplied documents are removed or changed.", "",
         f"There are {result['overlap_test_documents']} test documents whose exact text occurs in training. "
         "The official split is preserved. A separately labeled sensitivity analysis excludes those test rows; "
         "these are not substitute official scores and do not detect near duplicates.", "",
@@ -320,8 +340,10 @@ def write_report(result: dict, output: Path) -> None:
         "|---|---|---:|---:|---:|---:|"]
     for trial in result["trials"]:
         c = trial["config"]
+        nonoverlap = trial["nonoverlap_test"]
+        nonoverlap_f1 = f"{nonoverlap['macro_f1']:.4f}" if nonoverlap else "N/A (no documents)"
         lines.append(f"| {c['representation']} | {c['stem']} | {trial['validation']['macro_f1']:.4f} | "
-                     f"{trial['test']['accuracy']:.4f} | {trial['test']['macro_f1']:.4f} | {trial['nonoverlap_test']['macro_f1']:.4f} |")
+                     f"{trial['test']['accuracy']:.4f} | {trial['test']['macro_f1']:.4f} | {nonoverlap_f1} |")
     lines += ["", f"Selected configuration: **{selected['config']}**. "
               f"The always-{max(result['counts']['train'], key=result['counts']['train'].get)} baseline has "
               f"accuracy {result['majority_baseline']['accuracy']:.4f} and macro-F1 {result['majority_baseline']['macro_f1']:.4f}.", "",
