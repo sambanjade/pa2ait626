@@ -1,6 +1,6 @@
 # AIT 626 PA2: Tweet sentiment classification with Naive Bayes
 
-Sankalpa Banjade | Updated October 24, 2026
+Sankalpa Banjade Esha Elizabeth Ammimul Zola | Updated October 24, 2026
 
 Manually implemented multinomial Naive Bayes for positive/negative tweet
 classification. The experiment compares count and binary-occurrence features,
